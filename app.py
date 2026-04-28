@@ -6,6 +6,7 @@ import nfl_data_py as nfl
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 import numpy as np
+from data_utils import get_receiving_stats, get_weekly_receiving_stats, get_team_stats, get_weekly_data
 
 app = Flask(__name__)
 CORS(app)
@@ -63,29 +64,7 @@ def health():
 def receiving_stats():
     """Get receiving stats for wide receivers by year"""
     year = request.args.get('year', 2024, type=int)
-    
-    rec_cols = ["week", "player_id", "player_name", "position", "receptions", "targets", "receiving_yards"]
-    rec_yards = pd.DataFrame(nfl.import_weekly_data([year], rec_cols))
-    rec_yards = rec_yards[rec_yards['position'] == 'WR']
-    
-    wr_rows = rec_yards.groupby(['week', 'player_id'], as_index=False).agg({
-        'player_name': 'first',
-        'position': 'first',
-        'receptions': 'sum',
-        'targets': 'sum',
-        'receiving_yards': 'sum'
-    })
-    
-    season_totals = wr_rows.groupby(['player_id'], as_index=False).agg({
-        'player_name': 'first',
-        'position': 'first',
-        'receptions': 'sum',
-        'targets': 'sum',
-        'receiving_yards': 'sum'
-    })
-    
-    season_totals = season_totals.sort_values(by='receiving_yards', ascending=False)
-    
+    season_totals = get_receiving_stats(year)
     return jsonify(season_totals.to_dict(orient='records'))
 
 @app.route('/api/receiving-stats-weekly', methods=['GET'])
@@ -93,45 +72,14 @@ def receiving_stats_weekly():
     """Get weekly receiving stats for wide receivers"""
     year = request.args.get('year', 2024, type=int)
     week = request.args.get('week', type=int)
-    
-    rec_cols = ["week", "player_id", "player_name", "position", "receptions", "targets", "receiving_yards"]
-    rec_yards = pd.DataFrame(nfl.import_weekly_data([year], rec_cols))
-    rec_yards = rec_yards[rec_yards['position'] == 'WR']
-    
-    if week:
-        rec_yards = rec_yards[rec_yards['week'] == week]
-    
-    wr_rows = rec_yards.groupby(['week', 'player_id'], as_index=False).agg({
-        'player_name': 'first',
-        'position': 'first',
-        'receptions': 'sum',
-        'targets': 'sum',
-        'receiving_yards': 'sum'
-    })
-    
-    wr_rows = wr_rows.sort_values(by='receiving_yards', ascending=False)
-    
+    wr_rows = get_weekly_receiving_stats(year, week)
     return jsonify(wr_rows.to_dict(orient='records'))
 
 @app.route('/api/team-stats', methods=['GET'])
 def team_stats():
     """Get team performance stats by year"""
     year = request.args.get('year', 2024, type=int)
-    
-    df = nfl.import_pbp_data([year])
-    df = df[df['play_type'].notna()]
-    
-    stats = df.groupby(['posteam'], as_index=False).agg({
-        'yards_gained': 'sum',
-        'epa': 'mean',
-        'down': 'count',
-        'pass_attempt': 'sum',
-        'rush_attempt': 'sum',
-        'touchdown': 'sum'
-    })
-    
-    stats = stats.sort_values(by='yards_gained', ascending=False)
-    
+    stats = get_team_stats(year)
     return jsonify(stats.to_dict(orient='records'))
 
 @app.route('/api/weekly-data', methods=['GET'])
@@ -142,8 +90,7 @@ def weekly_data():
         years = [2024]
     
     columns = request.args.getlist('columns')
-    
-    raw = pd.DataFrame(nfl.import_weekly_data(years, columns if columns else None))
+    raw = get_weekly_data(years, columns if columns else None)
     
     return jsonify(raw.to_dict(orient='records'))
 
